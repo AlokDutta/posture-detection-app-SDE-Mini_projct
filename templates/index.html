@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pose Detection</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background-color: black;
+        }
+        canvas {
+            border: 1px solid white;
+        }
+        .controls {
+            margin-top: 10px;
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+        }
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <div id="canvas-container"></div>
+    <div class="controls">
+        <button onclick="toggleVideoFeed()">Toggle Video Feed</button>
+        <button onclick="toggleKeypoints()">Toggle Keypoints</button>
+        <button onclick="toggleSkeleton()">Toggle Skeleton</button>
+        <button onclick="captureSnapshot()">Capture Snapshot</button>
+    </div>
+
+    <script src="https://unpkg.com/ml5@0.12.2/dist/ml5.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.10.0/p5.min.js"></script>
+    <script>
+        let capture;
+        let posenet;
+        let poses = [];
+        let showKeypoints = true;
+        let showSkeleton = true;
+        let keypointSize = 20;
+        let showVideoFeed = true;
+        let backgroundColor = [0, 0, 0];
+        let currentPose = '';
+
+        function setup() {
+            // Dynamically adjust the canvas size based on window dimensions
+            let canvas = createCanvas(windowWidth * 0.5, windowHeight * 0.7);
+            canvas.parent('canvas-container');
+            capture = createCapture(VIDEO);
+            capture.size(width, height); // Match the canvas size
+            capture.hide();
+
+            posenet = ml5.poseNet(capture, modelLoaded);
+            posenet.on('pose', receivedPoses);
+        }
+
+        function receivedPoses(results) {
+            poses = results;
+        }
+
+        function modelLoaded() {
+            console.log('Model has loaded');
+        }
+
+        function draw() {
+            background(backgroundColor);
+
+            if (showVideoFeed) {
+                image(capture, 0, 0, width, height);  // Ensure video fits canvas
+            }
+
+            fill(255, 0, 0);
+
+            for (let i = 0; i < poses.length; i++) {
+                let singlePose = poses[i].pose;
+                let skeleton = poses[i].skeleton;
+
+                if (showKeypoints) {
+                    for (let j = 0; j < singlePose.keypoints.length; j++) {
+                        let keypoint = singlePose.keypoints[j];
+                        ellipse(keypoint.position.x, keypoint.position.y, keypointSize);
+                    }
+                }
+
+                if (showSkeleton) {
+                    stroke(255, 255, 255);
+                    strokeWeight(5);
+                    for (let j = 0; j < skeleton.length; j++) {
+                        line(skeleton[j][0].position.x, skeleton[j][0].position.y, skeleton[j][1].position.x, skeleton[j][1].position.y);
+                    }
+                }
+
+                detectPoses(singlePose);
+
+                fill(255, 255, 0);
+                textSize(24);
+                textAlign(CENTER);
+                text(currentPose, width / 2, 30);
+
+                if (i === 0) {
+                    let nose = singlePose.keypoints[0];
+                    let leye = singlePose.keypoints[1];
+                    let reye = singlePose.keypoints[2];
+
+                    let distLeftEyeNose = dist(nose.position.x, nose.position.y, leye.position.x, leye.position.y).toFixed(2);
+                    let distRightEyeNose = dist(nose.position.x, nose.position.y, reye.position.x, reye.position.y).toFixed(2);
+
+                    fill(255);
+                    textSize(18);
+                    textAlign(LEFT);
+                    text(`Left Eye-Nose Distance: ${distLeftEyeNose}`, 10, height - 40);
+                    text(`Right Eye-Nose Distance: ${distRightEyeNose}`, 10, height - 20);
+                }
+            }
+        }
+
+        function detectPoses(pose) {
+            let lwrist = pose.keypoints[9];
+            let rwrist = pose.keypoints[10];
+            let lshoulder = pose.keypoints[5];
+            let rshoulder = pose.keypoints[6];
+            let lknee = pose.keypoints[13];
+            let rknee = pose.keypoints[14];
+            let hip = pose.keypoints[11];
+
+            let wristAligned = Math.abs(lwrist.position.y - lshoulder.position.y) < 20 &&
+                               Math.abs(rwrist.position.y - rshoulder.position.y) < 20;
+            let handsApart = Math.abs(lwrist.position.x - rwrist.position.x) > 300;
+
+            let handsAboveHead = lwrist.position.y < lshoulder.position.y && rwrist.position.y < rshoulder.position.y;
+            let kneesBent = lknee.position.y < hip.position.y && rknee.position.y < hip.position.y;
+
+            if (wristAligned && handsApart) {
+                currentPose = 'T-Pose';
+                backgroundColor = [0, 255, 0];
+            } else if (handsAboveHead) {
+                currentPose = 'Hands Up Pose';
+                backgroundColor = [0, 0, 255];
+            } else if (kneesBent) {
+                currentPose = 'Squat Pose';
+                backgroundColor = [255, 0, 0];
+            } else {
+                currentPose = 'No Pose Detected';
+                backgroundColor = [0, 0, 0];
+            }
+        }
+
+        function toggleVideoFeed() {
+            showVideoFeed = !showVideoFeed;
+        }
+
+        function toggleKeypoints() {
+            showKeypoints = !showKeypoints;
+        }
+
+        function toggleSkeleton() {
+            showSkeleton = !showSkeleton;
+        }
+
+        function captureSnapshot() {
+            saveCanvas('pose_snapshot', 'png');
+        }
+
+        // Update canvas size when the window is resized
+        function windowResized() {
+            resizeCanvas(windowWidth * 0.9, windowHeight * 0.7);
+            capture.size(width, height);  // Adjust video size as well
+        }
+
+        function keyPressed() {
+            if (key === 's') {
+                saveCanvas('pose_snapshot', 'png');
+            }
+            if (key === 'k') {
+                showKeypoints = !showKeypoints;
+            }
+            if (key === 'l') {
+                showSkeleton = !showSkeleton;
+            }
+            if (key === '+') {
+                keypointSize += 5;
+            }
+            if (key === '-' && keypointSize > 5) {
+                keypointSize -= 5;
+            }
+            if (key === 'v') {
+                showVideoFeed = !showVideoFeed;
+            }
+        }
+    </script>
+</body>
+</html>
