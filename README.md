@@ -80,10 +80,3 @@ pose-detection-web-app/
 │   └── index.html            # Frontend HTML page
 └── README.md                 # Project README file
 ```
-## Future Improvements
-
-- **Pose Customization:** Add more options for poses to be detected.
- 
-- **Accuracy Improvement:** Fine-tune threshold for pose classification
--Multiplayer support: must be able to add a few people.
-Extra feature: added features of the ability to add features like pose comparison or fitness tracking.
